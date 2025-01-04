@@ -56,7 +56,8 @@ var navigation = (data) => ({
   "C-b": new VimNode({ ...data, move: movePageUp }),
   "C-f": new VimNode({ ...data, move: movePageDown }),
   "C-u": new VimNode({ ...data, move: moveHalfPageUp }),
-  "C-d": new VimNode({ ...data, move: moveHalfPageDown })
+  "C-d": new VimNode({ ...data, move: moveHalfPageDown }),
+  f: new VimNode({ ...data, move: moveToChar, readNextChar: true })
 });
 var selectors = (data) => ({
   a: new VimNode(data, {
@@ -117,7 +118,6 @@ var commandTree = new VimNode({}, {
     W: new VimNode({ select: selectToNextWordPlus }),
     t: new VimNode({ select: selectToChar, readNextChar: true })
   }),
-  f: new VimNode({ action: actionMoveToChar, readNextChar: true }),
   D: new VimNode({ action: actionDeleteRange, move: lineEnd, mode: 0 /* COMMAND */ }),
   i: new VimNode({ action: actionInsert }),
   J: new VimNode({ action: actionMergeLines }),
@@ -311,10 +311,10 @@ function getSelection(vim, data) {
   const text = getText(vim);
   const caret = getCaret(vim);
   if (data.select) {
-    return data.select(text, caret, data);
+    return data.select(text, caret, vim);
   }
   if (data.move) {
-    const mov = data.move(text, caret);
+    const mov = data.move(text, caret, vim);
     return mov > caret ? [caret, mov] : [mov, caret];
   }
   return [0, 0];
@@ -389,14 +389,13 @@ function findRegexBreak(text, pos, regex) {
 var START = 0;
 var END = 1;
 function inside(f) {
-  return (text, pos, data) => {
-    const range = f(text, pos, data);
+  return (text, pos, vim) => {
+    const range = f(text, pos, vim);
     return range[END] === range[START] ? range : [range[START] + 1, range[END] - 1];
   };
 }
-function selectToChar(text, pos, data) {
-  const end = text.indexOf(data.nextChar, pos + 1);
-  return [pos, end === -1 ? text.length : end];
+function selectToChar(text, pos, vim) {
+  return [pos, moveToChar(text, pos, vim)];
 }
 function selectLine(text, pos) {
   return [lineStart(text, pos), lineEnd(text, pos)];
@@ -597,6 +596,10 @@ function moveToPreviousWord(text, pos) {
 function moveToPreviousWordPlus(text, pos) {
   return selectWordPlus(text, pos - countSpaces(text, pos) - 1)[START];
 }
+function moveToChar(text, pos, vim) {
+  const end = text.indexOf(vim.data.nextChar, pos + 1);
+  return end === -1 ? pos : end;
+}
 function actionEnterIndend(vim) {
   const text = getText(vim);
   const caret = getCaret(vim);
@@ -622,9 +625,7 @@ function actionDigit(vim, data) {
   }
 }
 function actionMove(vim, data) {
-  if (data.move) {
-    setCaret(vim, data.move(getText(vim), getCaret(vim)));
-  }
+  setCaret(vim, data.move(getText(vim), getCaret(vim), vim));
 }
 function actionAppend(vim) {
   const caret = getCaret(vim);
@@ -758,13 +759,6 @@ function actionAlterLineStart(vim, data, f) {
   const ls = lineStart(text, start);
   setText(vim, text.slice(0, ls) + f(text.slice(ls, end)) + text.slice(end));
   setCaret(vim, ls + countSpaces(text, ls));
-}
-function actionMoveToChar(vim, data) {
-  const caret = getCaret(vim);
-  const end = getText(vim).indexOf(data.nextChar, caret + 1);
-  if (end !== -1) {
-    setCaret(vim, end);
-  }
 }
 
 // index.ts
