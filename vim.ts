@@ -409,6 +409,9 @@ function setMode(vim: Vim, mode: Mode): void {
 
 function resetCommand(vim: Vim): void {
     if (
+        // NOTE: do NOT reset keyseq if the current action
+        // was setting the mode to INSERT or VISUAL
+        // e.g. capture "i", "a", "v"
         vim.data.mode !== Mode.INSERT
         && vim.data.mode !== Mode.VISUAL
     ) {
