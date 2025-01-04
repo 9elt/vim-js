@@ -25,13 +25,13 @@ type Key = Digit | "ArrowLeft" | "ArrowDown" | "ArrowUp" | "ArrowRight"
     | "End" | "Home" | "Insert" | "Delete"
     | "h" | "j" | "k" | "l" | "_" | "w" | "W" | "e" | "E" | "b" | "B" | "g"
     | "G" | "p" | "a" | "A" | "c" | "C" | "d" | "D" | "i" | "J" | "o" | "O"
-    | "P" | "s" | "u" | "v" | "x" | "r" | "y" | ">" | "<" | "$" | "'" | '"'
-    | "`" | "(" | ")" | "[" | "]" | "{" | "}" | "<" | ">"
+    | "P" | "s" | "u" | "v" | "x" | "r" | "y" | "f" | "t" | ">" | "<" | "$"
+    | "'" | '"' | "`" | "(" | ")" | "[" | "]" | "{" | "}" | "<" | ">"
     | "C-c" | "C-u" | "C-d" | "C-f" | "C-b" | "C-s" | "C-r";
 
 type TextRange = [number, number];
 
-type Select = (text: string, pos: number) => TextRange;
+type Select = (text: string, pos: number, data: VimNodeData) => TextRange;
 
 type Move = (text: string, pos: number) => number;
 
@@ -169,8 +169,9 @@ const commandTree = new VimNode({}, {
         "d": new VimNode({ select: selectLineNL }),
         "w": new VimNode({ select: selectToNextWord }),
         "W": new VimNode({ select: selectToNextWordPlus }),
-        // TODO: "t"
+        "t": new VimNode({ select: selectToChar, readNextChar: true }),
     }),
+    "f": new VimNode({ action: actionMoveToChar, readNextChar: true }),
     "D": new VimNode({ action: actionDeleteRange, move: lineEnd, mode: Mode.COMMAND }),
     "i": new VimNode({ action: actionInsert }),
     "J": new VimNode({ action: actionMergeLines }),
@@ -284,7 +285,7 @@ function onKey(vim: Vim, key: Key): boolean {
         const prevHistoryState = toHistoryState(vim);
 
         vim.data.nextChar = key;
-        vim.node.data.action!(vim, vim.data);
+        vim.data.action!(vim, vim.data);
 
         if (!vim.data.dontSaveUndoState) {
             saveUndoState(vim, prevHistoryState);
@@ -439,7 +440,7 @@ function getSelection(vim: Vim, data: VimNodeData): TextRange {
     const caret = getCaret(vim);
 
     if (data.select) {
-        return data.select(text, caret);
+        return data.select(text, caret, data);
     }
 
     if (data.move) {
@@ -553,13 +554,18 @@ const START = 0;
 const END = 1;
 
 function inside(f: Select): Select {
-    return (text, pos) => {
-        const range = f(text, pos);
+    return (text, pos, data) => {
+        const range = f(text, pos, data);
 
         return range[END] === range[START]
             ? range
             : [range[START] + 1, range[END] - 1];
     };
+}
+
+function selectToChar(text: string, pos: number, data: VimNodeData): TextRange {
+    const end = text.indexOf(data.nextChar!, pos + 1);
+    return [pos, end === -1 ? text.length : end];
 }
 
 function selectLine(text: string, pos: number): TextRange {
@@ -1081,4 +1087,13 @@ function actionAlterLineStart(vim: Vim, data: VimNodeData, f: (str: string) => s
 
     // FIX: Caret position
     setCaret(vim, ls + countSpaces(text, ls));
+}
+
+function actionMoveToChar(vim: Vim, data: VimNodeData): void {
+    const caret = getCaret(vim);
+    const end = getText(vim).indexOf(data.nextChar!, caret + 1);
+
+    if (end !== -1) {
+        setCaret(vim, end);
+    }
 }

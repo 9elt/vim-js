@@ -92,28 +92,32 @@ var selectors = (data) => ({
     ">": new VimNode({ select: inside(selectAngles) })
   })
 });
-var _selectors = selectors();
-var _navigation = navigation();
+var baseSelectors = selectors();
+var visualSelectors = selectors({ action: actionSetVisualSelection });
+var baseNavigation = navigation();
+var moveNavigation = navigation({ action: actionMove });
 var commandTree = new VimNode({}, {
-  ...navigation({ action: actionMove }),
+  ...moveNavigation,
   ...digits,
   a: new VimNode({ action: actionAppend }),
   A: new VimNode({ action: actionAppendToEnd }),
   c: new VimNode({ action: actionDeleteRange, mode: 1 /* INSERT */ }, {
-    ..._navigation,
-    ..._selectors,
+    ...baseNavigation,
+    ...baseSelectors,
     c: new VimNode({ select: selectLine }),
     w: new VimNode({ select: selectToWordBound }),
     W: new VimNode({ select: selectToWordBoundPlus })
   }),
   C: new VimNode({ action: actionDeleteRange, move: lineEnd, mode: 1 /* INSERT */ }),
   d: new VimNode({ action: actionDeleteRange, mode: 0 /* COMMAND */ }, {
-    ..._navigation,
-    ..._selectors,
+    ...baseNavigation,
+    ...baseSelectors,
     d: new VimNode({ select: selectLineNL }),
     w: new VimNode({ select: selectToNextWord }),
-    W: new VimNode({ select: selectToNextWordPlus })
+    W: new VimNode({ select: selectToNextWordPlus }),
+    t: new VimNode({ select: selectToChar, readNextChar: true })
   }),
+  f: new VimNode({ action: actionMoveToChar, readNextChar: true }),
   D: new VimNode({ action: actionDeleteRange, move: lineEnd, mode: 0 /* COMMAND */ }),
   i: new VimNode({ action: actionInsert }),
   J: new VimNode({ action: actionMergeLines }),
@@ -128,26 +132,26 @@ var commandTree = new VimNode({}, {
   x: new VimNode({ action: actionDeleteChar }),
   r: new VimNode({ action: actionReplaceChar, readNextChar: true }),
   y: new VimNode({ action: actionYankRange }, {
-    ..._navigation,
-    ..._selectors,
+    ...baseNavigation,
+    ...baseSelectors,
     y: new VimNode({ select: selectLineNL }),
     w: new VimNode({ select: selectToNextWord }),
     W: new VimNode({ select: selectToNextWordPlus })
   }),
   ">": new VimNode({ action: actionIncreaseIndent }, {
-    ..._navigation,
-    ..._selectors,
+    ...baseNavigation,
+    ...baseSelectors,
     ">": new VimNode({ select: selectLine })
   }),
   "<": new VimNode({ action: actionDecreaseIndent }, {
-    ..._navigation,
-    ..._selectors,
+    ...baseNavigation,
+    ...baseSelectors,
     "<": new VimNode({ select: selectLine })
   })
 });
 var visualTree = new VimNode({ action: actionMove }, {
-  ...navigation({ action: actionMove }),
-  ...selectors({ action: actionSetVisualSelection }),
+  ...moveNavigation,
+  ...visualSelectors,
   ...digits,
   d: new VimNode({ action: actionDeleteVisualSelection, mode: 0 /* COMMAND */ }),
   c: new VimNode({ action: actionDeleteVisualSelection, mode: 1 /* INSERT */ }),
@@ -201,7 +205,7 @@ function onKey(vim, key) {
   if (vim.data.readNextChar) {
     const prevHistoryState = toHistoryState(vim);
     vim.data.nextChar = key;
-    vim.node.data.action(vim, vim.data);
+    vim.data.action(vim, vim.data);
     if (!vim.data.dontSaveUndoState) {
       saveUndoState(vim, prevHistoryState);
     }
@@ -307,7 +311,7 @@ function getSelection(vim, data) {
   const text = getText(vim);
   const caret = getCaret(vim);
   if (data.select) {
-    return data.select(text, caret);
+    return data.select(text, caret, data);
   }
   if (data.move) {
     const mov = data.move(text, caret);
@@ -385,10 +389,14 @@ function findRegexBreak(text, pos, regex) {
 var START = 0;
 var END = 1;
 function inside(f) {
-  return (text, pos) => {
-    const range = f(text, pos);
+  return (text, pos, data) => {
+    const range = f(text, pos, data);
     return range[END] === range[START] ? range : [range[START] + 1, range[END] - 1];
   };
+}
+function selectToChar(text, pos, data) {
+  const end = text.indexOf(data.nextChar, pos + 1);
+  return [pos, end === -1 ? text.length : end];
 }
 function selectLine(text, pos) {
   return [lineStart(text, pos), lineEnd(text, pos)];
@@ -750,6 +758,13 @@ function actionAlterLineStart(vim, data, f) {
   const ls = lineStart(text, start);
   setText(vim, text.slice(0, ls) + f(text.slice(ls, end)) + text.slice(end));
   setCaret(vim, ls + countSpaces(text, ls));
+}
+function actionMoveToChar(vim, data) {
+  const caret = getCaret(vim);
+  const end = getText(vim).indexOf(data.nextChar, caret + 1);
+  if (end !== -1) {
+    setCaret(vim, end);
+  }
 }
 
 // index.ts
