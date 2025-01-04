@@ -167,9 +167,16 @@ class Vim {
     this.textarea = textarea;
     textarea.addEventListener("keydown", (event) => {
       if (!RESERVED_KEYS.includes(event.key)) {
-        onKey(this, event.ctrlKey ? "C-" + event.key : event.key, event);
+        const key = event.ctrlKey ? "C-" + event.key : event.key;
+        if (onKey(this, key)) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
       }
     });
+    if (typeof navigator !== "undefined") {
+      navigator.clipboard.readText().then((text) => this.clipboard = text);
+    }
   }
 }
 function getText(vim) {
@@ -192,27 +199,48 @@ function setCaret(vim, caret) {
     vim.textarea.setSelectionRange(caret, caret);
   }
 }
-function onKey(vim, key, event) {
-  let passKeys;
+function onKey(vim, key) {
   if (key === "Escape" || key === "C-c" || key === "C-s") {
     reset(vim);
-    passKeys = false;
-  } else if (vim.mode === 1 /* INSERT */) {
+    return true;
+  }
+  if (vim.mode === 1 /* INSERT */) {
     if (key === "Enter") {
       actionEnterIndend(vim);
-      passKeys = false;
-    } else {
-      passKeys = true;
+      return true;
     }
-  } else if (key !== null) {
-    acceptKey(vim, key);
-    passKeys = false;
+    if (key === "Tab") {
+      actionTab(vim);
+      return true;
+    }
+    return false;
   }
-  if (passKeys === false) {
-    event.preventDefault();
-    event.stopPropagation();
+  const node = vim.node.nodes[key];
+  console.log(vim.sequence + key);
+  if (!node) {
+    resetCommand(vim);
+    return false;
   }
-  return passKeys;
+  vim.sequence += key;
+  vim.node = node;
+  vim.data = { ...vim.data, ...node.data };
+  if (isLeaf(node)) {
+    const repeat = vim.data.digit ? 1 : Math.max(0, Math.min(parseInt(vim.digitbuf || "1"), REPEAT_LIMIT));
+    if (!vim.data.digit) {
+      vim.digitbuf = "";
+    }
+    vim.allowClipboardReset = true;
+    if (!vim.data.dontSaveUndoState) {
+      saveUndoState(vim);
+    }
+    if (vim.data.action) {
+      for (var i2 = 0;i2 < repeat; i2++) {
+        vim.data.action(vim, vim.data);
+      }
+    }
+    resetCommand(vim);
+  }
+  return true;
 }
 function setMode(vim, mode) {
   if (vim.mode === mode) {
@@ -235,33 +263,6 @@ function resetCommand(vim) {
   vim.node = vim.mode === 2 /* VISUAL */ ? visualTree : commandTree;
   vim.data = {};
   vim.sequence = "";
-}
-function acceptKey(vim, key) {
-  const node = vim.node.nodes[key];
-  console.log(vim.sequence + key);
-  if (!node) {
-    resetCommand(vim);
-    return;
-  }
-  vim.sequence += key;
-  vim.node = node;
-  vim.data = { ...vim.data, ...node.data };
-  if (isLeaf(node)) {
-    const repeat = vim.data.digit ? 1 : Math.max(0, Math.min(parseInt(vim.digitbuf || "1"), REPEAT_LIMIT));
-    if (!vim.data.digit) {
-      vim.digitbuf = "";
-    }
-    vim.allowClipboardReset = true;
-    if (!vim.data.dontSaveUndoState) {
-      saveUndoState(vim);
-    }
-    if (vim.data.action) {
-      for (var i2 = 0;i2 < repeat; i2++) {
-        vim.data.action(vim, vim.data);
-      }
-    }
-    resetCommand(vim);
-  }
 }
 function saveUndoState(vim) {
   const text = vim.textarea.value;
@@ -573,6 +574,14 @@ function actionEnterIndend(vim) {
   const ls = lineStart(text, caret);
   const spacing = `
 ` + " ".repeat(Math.min(caret - ls, countSpaces(text, ls)));
+  setText(vim, insertAt(text, caret, spacing));
+  setCaret(vim, caret + spacing.length);
+}
+function actionTab(vim) {
+  const text = getText(vim);
+  const caret = getCaret(vim);
+  const ls = lineStart(text, caret);
+  const spacing = " ".repeat(TAB_WIDTH - (caret - ls) % TAB_WIDTH);
   setText(vim, insertAt(text, caret, spacing));
   setCaret(vim, caret + spacing.length);
 }

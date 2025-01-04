@@ -6,6 +6,8 @@ const REPEAT_LIMIT = 128;
 
 const UNDO_LIMIT = 128;
 
+const LOG = true;
+
 /*
  
 trees
@@ -235,9 +237,25 @@ export class Vim {
     constructor(public textarea: HTMLTextAreaElement) {
         textarea.addEventListener("keydown", (event) => {
             if (!RESERVED_KEYS.includes(event.key)) {
-                onKey(this, (event.ctrlKey ? "C-" + event.key : event.key) as Key, event);
+                const key = (
+                    event.ctrlKey
+                        ? "C-" + event.key
+                        : event.key
+                ) as Key;
+
+                if (onKey(this, key)) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
             }
         });
+
+        if (typeof navigator !== "undefined") {
+            navigator
+                .clipboard
+                .readText()
+                .then((text) => this.clipboard = text);
+        }
     };
 };
 
@@ -272,73 +290,33 @@ function setCaret(vim: Vim, caret: number) {
     }
 }
 
-function onKey(vim: Vim, key: Key, event: KeyboardEvent) {
-    let passKeys: boolean | undefined;
-
+function onKey(vim: Vim, key: Key) {
     if (key === "Escape" || key === "C-c" || key === "C-s") {
         reset(vim);
-        passKeys = false;
+        return true;
     }
-    else if (vim.mode === Mode.INSERT) {
+
+    if (vim.mode === Mode.INSERT) {
         if (key === "Enter") {
             actionEnterIndend(vim);
-            passKeys = false;
-        } else {
-            passKeys = true;
+            return true;
         }
-    }
-    else if (key !== null) {
-        acceptKey(vim, key);
-        passKeys = false;
-    }
 
-    // TODO: Improve
-    if (passKeys === false) {
-        event.preventDefault();
-        event.stopPropagation();
+        if (key === "Tab") {
+            actionTab(vim);
+            return true;
+        }
+
+        return false;;
     }
 
-    return passKeys;
-}
-
-function setMode(vim: Vim, mode: Mode) {
-    if (vim.mode === mode) {
-        return;
-    }
-
-    if (mode === Mode.VISUAL) {
-        vim.selectionStart = getCaret(vim);
-    }
-    else if (vim.mode === Mode.VISUAL) {
-        const caret = getCaret(vim);
-        vim.selectionStart = null;
-        vim.textarea.setSelectionRange(caret, caret);
-    }
-
-    vim.mode = mode;
-}
-
-function reset(vim: Vim) {
-    setMode(vim, Mode.COMMAND);
-    resetCommand(vim);
-}
-
-function resetCommand(vim: Vim) {
-    vim.node = vim.mode === Mode.VISUAL
-        ? visualTree
-        : commandTree;
-    vim.data = {};
-    vim.sequence = "";
-}
-
-function acceptKey(vim: Vim, key: Key) {
     const node = vim.node.nodes[key];
 
     console.log(vim.sequence + key);
 
     if (!node) {
         resetCommand(vim);
-        return;
+        return false;
     }
 
     vim.sequence += key;
@@ -370,6 +348,38 @@ function acceptKey(vim: Vim, key: Key) {
 
         resetCommand(vim);
     }
+
+    return true;
+}
+
+function setMode(vim: Vim, mode: Mode) {
+    if (vim.mode === mode) {
+        return;
+    }
+
+    if (mode === Mode.VISUAL) {
+        vim.selectionStart = getCaret(vim);
+    }
+    else if (vim.mode === Mode.VISUAL) {
+        const caret = getCaret(vim);
+        vim.selectionStart = null;
+        vim.textarea.setSelectionRange(caret, caret);
+    }
+
+    vim.mode = mode;
+}
+
+function reset(vim: Vim) {
+    setMode(vim, Mode.COMMAND);
+    resetCommand(vim);
+}
+
+function resetCommand(vim: Vim) {
+    vim.node = vim.mode === Mode.VISUAL
+        ? visualTree
+        : commandTree;
+    vim.data = {};
+    vim.sequence = "";
 }
 
 function saveUndoState(vim: Vim) {
@@ -827,6 +837,20 @@ function actionEnterIndend(vim: Vim) {
 
     const spacing = "\n" + " ".repeat(
         Math.min(caret - ls, countSpaces(text, ls))
+    );
+
+    setText(vim, insertAt(text, caret, spacing));
+    setCaret(vim, caret + spacing.length);
+}
+
+function actionTab(vim: Vim) {
+    const text = getText(vim);
+    const caret = getCaret(vim);
+
+    const ls = lineStart(text, caret);
+
+    const spacing = " ".repeat(
+        TAB_WIDTH - ((caret - ls) % TAB_WIDTH)
     );
 
     setText(vim, insertAt(text, caret, spacing));
