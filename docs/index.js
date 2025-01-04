@@ -57,7 +57,8 @@ var navigation = (data) => ({
   "C-f": new VimNode({ ...data, move: movePageDown }),
   "C-u": new VimNode({ ...data, move: moveHalfPageUp }),
   "C-d": new VimNode({ ...data, move: moveHalfPageDown }),
-  f: new VimNode({ ...data, move: moveToChar, readNextChar: true })
+  f: new VimNode({ ...data, move: moveToChar, readNextChar: true, offsetSelectionEnd: 1 }),
+  t: new VimNode({ ...data, move: moveBeforeChar, readNextChar: true, offsetSelectionEnd: 1 })
 });
 var selectors = (data) => ({
   a: new VimNode(data, {
@@ -115,8 +116,7 @@ var commandTree = new VimNode({}, {
     ...baseSelectors,
     d: new VimNode({ select: selectLineNL }),
     w: new VimNode({ select: selectToNextWord }),
-    W: new VimNode({ select: selectToNextWordPlus }),
-    t: new VimNode({ select: selectToChar, readNextChar: true })
+    W: new VimNode({ select: selectToNextWordPlus })
   }),
   D: new VimNode({ action: actionDeleteRange, move: lineEnd, mode: 0 /* COMMAND */ }),
   i: new VimNode({ action: actionInsert }),
@@ -314,7 +314,7 @@ function getSelection(vim, data) {
     return data.select(text, caret, vim);
   }
   if (data.move) {
-    const mov = data.move(text, caret, vim);
+    const mov = data.move(text, caret, vim) + (data.offsetSelectionEnd || 0);
     return mov > caret ? [caret, mov] : [mov, caret];
   }
   return [0, 0];
@@ -393,9 +393,6 @@ function inside(f) {
     const range = f(text, pos, vim);
     return range[END] === range[START] ? range : [range[START] + 1, range[END] - 1];
   };
-}
-function selectToChar(text, pos, vim) {
-  return [pos, moveToChar(text, pos, vim)];
 }
 function selectLine(text, pos) {
   return [lineStart(text, pos), lineEnd(text, pos)];
@@ -600,6 +597,10 @@ function moveToChar(text, pos, vim) {
   const end = text.indexOf(vim.data.nextChar, pos + 1);
   return end === -1 ? pos : end;
 }
+function moveBeforeChar(text, pos, vim) {
+  const end = text.indexOf(vim.data.nextChar, pos + 1);
+  return end === -1 ? pos : end - 1;
+}
 function actionEnterIndend(vim) {
   const text = getText(vim);
   const caret = getCaret(vim);
@@ -755,10 +756,12 @@ function actionDecreaseIndent(vim, data) {
 }
 function actionAlterLineStart(vim, data, f) {
   const text = getText(vim);
+  const caret = getCaret(vim);
   const [start, end] = getSelection(vim, data);
   const ls = lineStart(text, start);
   setText(vim, text.slice(0, ls) + f(text.slice(ls, end)) + text.slice(end));
-  setCaret(vim, ls + countSpaces(text, ls));
+  const offset = getText(vim).length - text.length;
+  setCaret(vim, caret + offset);
 }
 
 // index.ts
