@@ -23,11 +23,11 @@ type Digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";
 type Key = Digit | "ArrowLeft" | "ArrowDown" | "ArrowUp" | "ArrowRight"
     | "Enter" | "Backspace" | "Tab" | "Escape" | "PageUp" | "PageDown"
     | "End" | "Home" | "Insert" | "Delete"
-    | "h" | "j" | "k" | "l" | "_" | "w" | "W" | "e" | "E" | "b" | "B" | "g"
-    | "G" | "p" | "a" | "A" | "c" | "C" | "d" | "D" | "i" | "J" | "o" | "O"
-    | "P" | "s" | "u" | "v" | "x" | "r" | "y" | "f" | "t" | "<" | ">" | "$"
-    | "'" | '"' | "`" | "(" | ")" | "[" | "]" | "{" | "}"
-    | "C-c" | "C-u" | "C-d" | "C-f" | "C-b" | "C-s" | "C-r";
+    | "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" | "E" | "f" | "g"
+    | "G" | "h" | "i" | "j" | "J" | "k" | "l" | "o" | "O" | "p" | "P" | "r"
+    | "s" | "t" | "u" | "v" | "w" | "W" | "x" | "y" | "$" | "_" | "." | "'"
+    | '"' | "`" | "(" | ")" | "[" | "]" | "{" | "}" | "<" | ">"
+    | "C-b" | "C-c" | "C-d" | "C-f" | "C-r" | "C-s" | "C-u";
 
 type TextRange = [number, number];
 
@@ -156,8 +156,8 @@ const moveNavigation = navigation({ action: actionMove });
 const commandTree = new VimNode({}, {
     ...moveNavigation,
     ...digits,
-    "a": new VimNode({ action: actionAppend }),
-    "A": new VimNode({ action: actionAppendToEnd }),
+    "a": new VimNode({ action: actionAppend, mode: Mode.INSERT }),
+    "A": new VimNode({ action: actionAppendToEnd, mode: Mode.INSERT }),
     "c": new VimNode({ action: actionDeleteRange, mode: Mode.INSERT }, {
         ...baseNavigation,
         ...baseSelectors,
@@ -174,16 +174,16 @@ const commandTree = new VimNode({}, {
         "W": new VimNode({ select: selectToNextWordPlus }),
     }),
     "D": new VimNode({ action: actionDeleteRange, move: lineEnd, mode: Mode.COMMAND }),
-    "i": new VimNode({ action: actionInsert }),
+    "i": new VimNode({ action: actionSetMode, mode: Mode.INSERT }),
     "J": new VimNode({ action: actionMergeLines }),
-    "o": new VimNode({ action: actionInsertLineAfter }),
-    "O": new VimNode({ action: actionInsertLineBefore }),
+    "o": new VimNode({ action: actionInsertLineAfter, mode: Mode.INSERT }),
+    "O": new VimNode({ action: actionInsertLineBefore, mode: Mode.INSERT }),
     "p": new VimNode({ action: actionPasteAfter }),
     "P": new VimNode({ action: actionPasteBefore }),
     "s": new VimNode({ action: actionDeleteChar, mode: Mode.INSERT }),
     "u": new VimNode({ action: actionUndo, dontSaveUndoState: true }),
     "C-r": new VimNode({ action: actionRedo, dontSaveUndoState: true }),
-    "v": new VimNode({ action: actionVisualMode }),
+    "v": new VimNode({ action: actionSetMode, mode: Mode.VISUAL }),
     "x": new VimNode({ action: actionDeleteChar }),
     "r": new VimNode({ action: actionReplaceChar, readNextChar: true }),
     "y": new VimNode({ action: actionYankRange }, {
@@ -203,7 +203,7 @@ const commandTree = new VimNode({}, {
         ...baseSelectors,
         "<": new VimNode({ select: selectLine }),
     }),
-    // TODO: "."
+    ".": new VimNode({ action: actionRepeatLastAction }),
 });
 
 const visualTree = new VimNode({ action: actionMove }, {
@@ -224,7 +224,7 @@ vim
  
 */
 
-const RESERVED_KEYS = ["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "PrintScreen", "ScrollLock", "Pause"];
+const RESERVED_KEYS = ["Shift", "CapsLock", "Control", "Meta", "Alt", "AltGraph"];
 
 type History = {
     text: string;
@@ -236,6 +236,8 @@ export class Vim {
     node: VimNode = commandTree;
     data: VimNodeData = {};
     sequence: string = "";
+    keybuf: string[] = [];
+    modseq: string[] = [];
     digits: string = "";
     clipboard: string = "";
     redo: History[] = [];
@@ -245,11 +247,9 @@ export class Vim {
     constructor(public textarea: HTMLTextAreaElement) {
         textarea.addEventListener("keydown", (event) => {
             if (!RESERVED_KEYS.includes(event.key)) {
-                const key = (
-                    event.ctrlKey
-                        ? "C-" + event.key
-                        : event.key
-                ) as Key;
+                const key = event.ctrlKey
+                    ? "C-" + event.key
+                    : event.key;
 
                 if (onKey(this, key)) {
                     event.preventDefault();
@@ -260,9 +260,19 @@ export class Vim {
     };
 };
 
-function onKey(vim: Vim, key: Key): boolean {
+function onKey(vim: Vim, key: Key | string): boolean {
+    vim.keybuf.push(key);
+
     if (key === "Escape" || key === "C-c" || key === "C-s") {
-        reset(vim);
+        if (vim.keybuf.length > 1 && vim.mode === Mode.INSERT) {
+            vim.modseq = vim.keybuf;
+        }
+
+        vim.keybuf = [];
+
+        setMode(vim, Mode.COMMAND);
+        resetCommand(vim);
+
         return true;
     }
 
@@ -277,22 +287,16 @@ function onKey(vim: Vim, key: Key): boolean {
             return true;
         }
 
-        return false;;
+        return false;
     }
 
     console.log(vim.sequence + key);
 
     if (vim.data.readNextChar) {
-        const prevHistoryState = toHistoryState(vim);
-
         vim.data.nextChar = key;
-        vim.data.action!(vim, vim.data);
 
-        if (!vim.data.dontSaveUndoState) {
-            saveUndoState(vim, prevHistoryState);
-        }
+        exec(vim);
 
-        resetCommand(vim);
         return true;
     }
 
@@ -308,32 +312,40 @@ function onKey(vim: Vim, key: Key): boolean {
     vim.data = { ...vim.data, ...node.data };
 
     if (!vim.data.readNextChar && isLeaf(node)) {
-        const repeat: number = vim.data.digit ? 1 :
-            Math.max(0, Math.min(
-                parseInt(vim.digits || "1"),
-                REPEAT_LIMIT
-            ));
-
-        if (!vim.data.digit) {
-            vim.digits = "";
-        }
-
-        vim.allowClipboardReset = true;
-
-        const prevHistoryState = toHistoryState(vim);
-
-        for (var i = 0; i < repeat; i++) {
-            vim.data.action!(vim, vim.data);
-        }
-
-        if (!vim.data.dontSaveUndoState) {
-            saveUndoState(vim, prevHistoryState);
-        }
-
-        resetCommand(vim);
+        exec(vim);
     }
 
     return true;
+}
+
+function exec(vim: Vim): void {
+    const repeat: number = vim.data.digit ? 1 :
+        Math.max(0, Math.min(
+            parseInt(vim.digits || "1"),
+            REPEAT_LIMIT
+        ));
+
+    if (!vim.data.digit && vim.digits) {
+        vim.digits = "";
+    }
+
+    vim.allowClipboardReset = true;
+
+    const prevHistoryState = toHistoryState(vim);
+
+    for (var i = 0; i < repeat; i++) {
+        vim.data.action!(vim, vim.data);
+    }
+
+    if (vim.data.mode !== undefined) {
+        setMode(vim, vim.data.mode);
+    }
+
+    if (!vim.data.dontSaveUndoState) {
+        saveUndoState(vim, prevHistoryState);
+    }
+
+    resetCommand(vim);
 }
 
 function getText(vim: Vim): string {
@@ -391,12 +403,13 @@ function setMode(vim: Vim, mode: Mode): void {
     vim.mode = mode;
 }
 
-function reset(vim: Vim): void {
-    setMode(vim, Mode.COMMAND);
-    resetCommand(vim);
-}
-
 function resetCommand(vim: Vim): void {
+    if (
+        vim.data.mode !== Mode.INSERT
+        && vim.data.mode !== Mode.VISUAL
+    ) {
+        vim.keybuf = [];
+    }
     vim.node = vim.mode === Mode.VISUAL
         ? visualTree
         : commandTree;
@@ -408,6 +421,10 @@ function saveUndoState(vim: Vim, prevHistory: History): void {
     const currText = getText(vim);
 
     if (prevHistory.text !== currText) {
+        if (vim.keybuf.length) {
+            vim.modseq = vim.keybuf;
+        }
+
         vim.redo.length = 0;
 
         vim.undo.push(prevHistory);
@@ -912,21 +929,13 @@ function actionMove(vim: Vim, data: VimNodeData): void {
 function actionAppend(vim: Vim): void {
     const caret = getCaret(vim);
     setCaret(vim, Math.min(caret + 1, lineEnd(getText(vim), caret)));
-    setMode(vim, Mode.INSERT);
 }
 
 function actionAppendToEnd(vim: Vim): void {
     setCaret(vim, lineEnd(getText(vim), getCaret(vim)));
-    setMode(vim, Mode.INSERT);
 }
 
-function actionInsert(vim: Vim): void {
-    setMode(vim, Mode.INSERT);
-}
-
-function actionVisualMode(vim: Vim): void {
-    setMode(vim, Mode.VISUAL);
-}
+function actionSetMode(): void { }
 
 function actionUndo(vim: Vim): void {
     const undo = vim.undo.pop();
@@ -959,10 +968,9 @@ function actionRedo(vim: Vim): void {
 function actionDeleteRange(vim: Vim, data: VimNodeData): void {
     const [start, end] = getSelection(vim, data);
     yank(vim, start, end, true);
-    setMode(vim, data.mode || Mode.COMMAND);
 }
 
-function actionDeleteChar(vim: Vim, data: VimNodeData): void {
+function actionDeleteChar(vim: Vim): void {
     const text = getText(vim);
 
     const _caret = getCaret(vim);
@@ -971,8 +979,6 @@ function actionDeleteChar(vim: Vim, data: VimNodeData): void {
     if (!isLineEnd(text, caret)) {
         yank(vim, caret, caret + 1, true);
     }
-
-    setMode(vim, data.mode || Mode.COMMAND);
 }
 
 function actionReplaceChar(vim: Vim, data: VimNodeData): void {
@@ -995,24 +1001,20 @@ function actionSetVisualSelection(vim: Vim): void {
     setCaret(vim, end);
 }
 
-function actionDeleteVisualSelection(vim: Vim, data: VimNodeData): void {
+function actionDeleteVisualSelection(vim: Vim): void {
     yank(vim, ...getVisualSelection(vim), true);
-    setMode(vim, data.mode || Mode.COMMAND);
 }
 
-function actionYankVisualSelection(vim: Vim, data: VimNodeData): void {
+function actionYankVisualSelection(vim: Vim): void {
     yank(vim, ...getVisualSelection(vim), false);
-    setMode(vim, data.mode || Mode.COMMAND);
 }
 
-function actionPasteIntoVisualSelection(vim: Vim, data: VimNodeData): void {
+function actionPasteIntoVisualSelection(vim: Vim): void {
     const [start, end] = getVisualSelection(vim);
     const text = getText(vim);
 
     setText(vim, text.slice(0, start) + vim.clipboard + text.slice(end));
     setCaret(vim, start + vim.clipboard.length);
-
-    setMode(vim, data.mode || Mode.COMMAND);
 }
 
 function actionYankRange(vim: Vim, data: VimNodeData): void {
@@ -1052,8 +1054,6 @@ function actionInsertLineAfter(vim: Vim): void {
 
     setText(vim, insertAt(text, le, spacing));
     setCaret(vim, le + spacing.length);
-
-    setMode(vim, Mode.INSERT);
 }
 
 function actionInsertLineBefore(vim: Vim): void {
@@ -1066,8 +1066,6 @@ function actionInsertLineBefore(vim: Vim): void {
 
     setText(vim, insertAt(text, ls, spacing));
     setCaret(vim, ls + spacing.length - 1);
-
-    setMode(vim, Mode.INSERT);
 }
 
 function actionIncreaseIndent(vim: Vim, data: VimNodeData): void {
@@ -1090,5 +1088,21 @@ function actionAlterLineStart(vim: Vim, data: VimNodeData, f: (str: string) => s
         text.slice(0, ls) + f(text.slice(ls, end)) + text.slice(end)
     );
 
-    setCaret(vim, caret + getText(vim).length - text.length);
+    setCaret(vim, caret);
+}
+
+function actionRepeatLastAction(vim: Vim): void {
+    resetCommand(vim);
+
+    for (const key of vim.modseq) {
+        const accepted = onKey(vim, key);
+
+        // NOTE: synthetic insert event
+        if (!accepted && vim.mode === Mode.INSERT && key.length === 1) {
+            const text = getText(vim);
+            const caret = getCaret(vim);
+            setText(vim, insertAt(text, caret, key));
+            setCaret(vim, caret + 1);
+        }
+    }
 }
