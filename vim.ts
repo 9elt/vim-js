@@ -25,8 +25,8 @@ type Key = Digit | "ArrowLeft" | "ArrowDown" | "ArrowUp" | "ArrowRight"
     | "End" | "Home" | "Insert" | "Delete"
     | "h" | "j" | "k" | "l" | "_" | "w" | "W" | "e" | "E" | "b" | "B" | "g"
     | "G" | "p" | "a" | "A" | "c" | "C" | "d" | "D" | "i" | "J" | "o" | "O"
-    | "P" | "s" | "u" | "v" | "x" | "r" | "y" | "f" | "t" | ">" | "<" | "$"
-    | "'" | '"' | "`" | "(" | ")" | "[" | "]" | "{" | "}" | "<" | ">"
+    | "P" | "s" | "u" | "v" | "x" | "r" | "y" | "f" | "t" | "<" | ">" | "$"
+    | "'" | '"' | "`" | "(" | ")" | "[" | "]" | "{" | "}"
     | "C-c" | "C-u" | "C-d" | "C-f" | "C-b" | "C-s" | "C-r";
 
 type TextRange = [number, number];
@@ -224,7 +224,7 @@ vim
  
 */
 
-const RESERVED_KEYS = ["Shift", "Control", "Alt", "Meta", "AltGraph"];
+const RESERVED_KEYS = ["Shift", "Control", "Alt", "Meta", "AltGraph", "CapsLock", "PrintScreen", "ScrollLock", "Pause"];
 
 type History = {
     text: string;
