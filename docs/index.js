@@ -166,8 +166,8 @@ class Vim {
   mode = 0 /* COMMAND */;
   node = commandTree;
   data = {};
-  sequence = "";
-  keybuf = [];
+  cmdseq = "";
+  keyseq = [];
   modseq = [];
   digits = "";
   clipboard = "";
@@ -189,12 +189,12 @@ class Vim {
   }
 }
 function onKey(vim, key) {
-  vim.keybuf.push(key);
+  vim.keyseq.push(key);
   if (key === "Escape" || key === "C-c" || key === "C-s") {
-    if (vim.keybuf.length > 1 && vim.mode === 1 /* INSERT */) {
-      vim.modseq = vim.keybuf;
+    if (vim.keyseq.length > 1 && vim.mode === 1 /* INSERT */) {
+      vim.modseq = vim.keyseq;
     }
-    vim.keybuf = [];
+    vim.keyseq = [];
     setMode(vim, 0 /* COMMAND */);
     resetCommand(vim);
     return true;
@@ -210,7 +210,7 @@ function onKey(vim, key) {
     }
     return false;
   }
-  console.log(vim.sequence + key);
+  console.log(vim.cmdseq + key);
   if (vim.data.readNextChar) {
     vim.data.nextChar = key;
     exec(vim);
@@ -221,7 +221,7 @@ function onKey(vim, key) {
     resetCommand(vim);
     return false;
   }
-  vim.sequence += key;
+  vim.cmdseq += key;
   vim.node = node;
   vim.data = { ...vim.data, ...node.data };
   if (!vim.data.readNextChar && isLeaf(node)) {
@@ -288,17 +288,17 @@ function setMode(vim, mode) {
 }
 function resetCommand(vim) {
   if (vim.data.mode !== 1 /* INSERT */ && vim.data.mode !== 2 /* VISUAL */) {
-    vim.keybuf = [];
+    vim.keyseq = [];
   }
   vim.node = vim.mode === 2 /* VISUAL */ ? visualTree : commandTree;
   vim.data = {};
-  vim.sequence = "";
+  vim.cmdseq = "";
 }
 function saveUndoState(vim, prevHistory) {
   const currText = getText(vim);
   if (prevHistory.text !== currText) {
-    if (vim.keybuf.length) {
-      vim.modseq = vim.keybuf;
+    if (vim.keyseq.length) {
+      vim.modseq = vim.keyseq;
     }
     vim.redo.length = 0;
     vim.undo.push(prevHistory);

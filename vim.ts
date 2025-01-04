@@ -235,8 +235,12 @@ export class Vim {
     mode: Mode = Mode.COMMAND;
     node: VimNode = commandTree;
     data: VimNodeData = {};
-    sequence: string = "";
-    keybuf: string[] = [];
+    // NOTE: command sequence
+    cmdseq: string = "";
+    // NOTE: keyseq is used to store the last key sequence,
+    // including INSERT and Esc keys
+    keyseq: string[] = [];
+    // NOTE: modseq is the last keyseq that modified the text
     modseq: string[] = [];
     digits: string = "";
     clipboard: string = "";
@@ -261,14 +265,14 @@ export class Vim {
 };
 
 function onKey(vim: Vim, key: Key | string): boolean {
-    vim.keybuf.push(key);
+    vim.keyseq.push(key);
 
     if (key === "Escape" || key === "C-c" || key === "C-s") {
-        if (vim.keybuf.length > 1 && vim.mode === Mode.INSERT) {
-            vim.modseq = vim.keybuf;
+        if (vim.keyseq.length > 1 && vim.mode === Mode.INSERT) {
+            vim.modseq = vim.keyseq;
         }
 
-        vim.keybuf = [];
+        vim.keyseq = [];
 
         setMode(vim, Mode.COMMAND);
         resetCommand(vim);
@@ -290,7 +294,7 @@ function onKey(vim: Vim, key: Key | string): boolean {
         return false;
     }
 
-    console.log(vim.sequence + key);
+    console.log(vim.cmdseq + key);
 
     if (vim.data.readNextChar) {
         vim.data.nextChar = key;
@@ -307,7 +311,7 @@ function onKey(vim: Vim, key: Key | string): boolean {
         return false;
     }
 
-    vim.sequence += key;
+    vim.cmdseq += key;
     vim.node = node;
     vim.data = { ...vim.data, ...node.data };
 
@@ -408,21 +412,21 @@ function resetCommand(vim: Vim): void {
         vim.data.mode !== Mode.INSERT
         && vim.data.mode !== Mode.VISUAL
     ) {
-        vim.keybuf = [];
+        vim.keyseq = [];
     }
     vim.node = vim.mode === Mode.VISUAL
         ? visualTree
         : commandTree;
     vim.data = {};
-    vim.sequence = "";
+    vim.cmdseq = "";
 }
 
 function saveUndoState(vim: Vim, prevHistory: History): void {
     const currText = getText(vim);
 
     if (prevHistory.text !== currText) {
-        if (vim.keybuf.length) {
-            vim.modseq = vim.keybuf;
+        if (vim.keyseq.length) {
+            vim.modseq = vim.keyseq;
         }
 
         vim.redo.length = 0;
