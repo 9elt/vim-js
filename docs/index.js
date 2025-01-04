@@ -58,56 +58,58 @@ var navigation = (data) => ({
   "C-u": new VimNode({ ...data, move: moveHalfPageUp }),
   "C-d": new VimNode({ ...data, move: moveHalfPageDown })
 });
-var a = new VimNode({}, {
-  p: new VimNode({ select: selectParagraphWithSpacesAfter }),
-  w: new VimNode({ select: selectWordWithSpacesAfter }),
-  W: new VimNode({ select: selectWordPlusWithSpacesAfter }),
-  "'": new VimNode({ select: selectSingleQuotes }),
-  '"': new VimNode({ select: selectDoubleQuotes }),
-  "`": new VimNode({ select: selectBacktick }),
-  "(": new VimNode({ select: selectBrackets }),
-  ")": new VimNode({ select: selectBrackets }),
-  "[": new VimNode({ select: selectSquares }),
-  "]": new VimNode({ select: selectSquares }),
-  "{": new VimNode({ select: selectBraces }),
-  "}": new VimNode({ select: selectBraces }),
-  "<": new VimNode({ select: selectAngles }),
-  ">": new VimNode({ select: selectAngles })
+var selectors = (data) => ({
+  a: new VimNode(data, {
+    p: new VimNode({ select: selectParagraphWithSpacesAfter }),
+    w: new VimNode({ select: selectWordWithSpacesAfter }),
+    W: new VimNode({ select: selectWordPlusWithSpacesAfter }),
+    "'": new VimNode({ select: selectSingleQuotes }),
+    '"': new VimNode({ select: selectDoubleQuotes }),
+    "`": new VimNode({ select: selectBacktick }),
+    "(": new VimNode({ select: selectBrackets }),
+    ")": new VimNode({ select: selectBrackets }),
+    "[": new VimNode({ select: selectSquares }),
+    "]": new VimNode({ select: selectSquares }),
+    "{": new VimNode({ select: selectBraces }),
+    "}": new VimNode({ select: selectBraces }),
+    "<": new VimNode({ select: selectAngles }),
+    ">": new VimNode({ select: selectAngles })
+  }),
+  i: new VimNode(data, {
+    p: new VimNode({ select: selectParagraph }),
+    w: new VimNode({ select: selectWord }),
+    W: new VimNode({ select: selectWordPlus }),
+    "'": new VimNode({ select: inside(selectSingleQuotes) }),
+    '"': new VimNode({ select: inside(selectDoubleQuotes) }),
+    "`": new VimNode({ select: inside(selectBacktick) }),
+    "(": new VimNode({ select: inside(selectBrackets) }),
+    ")": new VimNode({ select: inside(selectBrackets) }),
+    "[": new VimNode({ select: inside(selectSquares) }),
+    "]": new VimNode({ select: inside(selectSquares) }),
+    "{": new VimNode({ select: inside(selectBraces) }),
+    "}": new VimNode({ select: inside(selectBraces) }),
+    "<": new VimNode({ select: inside(selectAngles) }),
+    ">": new VimNode({ select: inside(selectAngles) })
+  })
 });
-var i = new VimNode({}, {
-  p: new VimNode({ select: selectParagraph }),
-  w: new VimNode({ select: selectWord }),
-  W: new VimNode({ select: selectWordPlus }),
-  "'": new VimNode({ select: inside(selectSingleQuotes) }),
-  '"': new VimNode({ select: inside(selectDoubleQuotes) }),
-  "`": new VimNode({ select: inside(selectBacktick) }),
-  "(": new VimNode({ select: inside(selectBrackets) }),
-  ")": new VimNode({ select: inside(selectBrackets) }),
-  "[": new VimNode({ select: inside(selectSquares) }),
-  "]": new VimNode({ select: inside(selectSquares) }),
-  "{": new VimNode({ select: inside(selectBraces) }),
-  "}": new VimNode({ select: inside(selectBraces) }),
-  "<": new VimNode({ select: inside(selectAngles) }),
-  ">": new VimNode({ select: inside(selectAngles) })
-});
+var _selectors = selectors();
+var _navigation = navigation();
 var commandTree = new VimNode({}, {
   ...navigation({ action: actionMove }),
   ...digits,
   a: new VimNode({ action: actionAppend }),
   A: new VimNode({ action: actionAppendToEnd }),
   c: new VimNode({ action: actionDeleteRange, mode: 1 /* INSERT */ }, {
-    ...navigation(),
-    a,
-    i,
+    ..._navigation,
+    ..._selectors,
     c: new VimNode({ select: selectLine }),
     w: new VimNode({ select: selectToWordBound }),
     W: new VimNode({ select: selectToWordBoundPlus })
   }),
   C: new VimNode({ action: actionDeleteRange, move: lineEnd, mode: 1 /* INSERT */ }),
   d: new VimNode({ action: actionDeleteRange, mode: 0 /* COMMAND */ }, {
-    ...navigation(),
-    a,
-    i,
+    ..._navigation,
+    ..._selectors,
     d: new VimNode({ select: selectLineNL }),
     w: new VimNode({ select: selectToNextWord }),
     W: new VimNode({ select: selectToNextWordPlus })
@@ -126,31 +128,31 @@ var commandTree = new VimNode({}, {
   x: new VimNode({ action: actionDeleteChar }),
   r: new VimNode({ action: actionReplaceChar, readNextChar: true }),
   y: new VimNode({ action: actionYankRange }, {
-    ...navigation(),
-    a,
-    i,
+    ..._navigation,
+    ..._selectors,
     y: new VimNode({ select: selectLineNL }),
     w: new VimNode({ select: selectToNextWord }),
     W: new VimNode({ select: selectToNextWordPlus })
   }),
   ">": new VimNode({ action: actionIncreaseIndent }, {
-    ...navigation(),
-    a,
-    i,
+    ..._navigation,
+    ..._selectors,
     ">": new VimNode({ select: selectLine })
   }),
   "<": new VimNode({ action: actionDecreaseIndent }, {
-    ...navigation(),
-    a,
-    i,
+    ..._navigation,
+    ..._selectors,
     "<": new VimNode({ select: selectLine })
   })
 });
-var visualTree = new VimNode({}, {
+var visualTree = new VimNode({ action: actionMove }, {
   ...navigation({ action: actionMove }),
+  ...selectors({ action: actionSetVisualSelection }),
   ...digits,
-  d: new VimNode({ action: actionDeleteCurrentSelection, mode: 0 /* COMMAND */ }),
-  c: new VimNode({ action: actionDeleteCurrentSelection, mode: 1 /* INSERT */ })
+  d: new VimNode({ action: actionDeleteVisualSelection, mode: 0 /* COMMAND */ }),
+  c: new VimNode({ action: actionDeleteVisualSelection, mode: 1 /* INSERT */ }),
+  y: new VimNode({ action: actionYankVisualSelection, mode: 0 /* COMMAND */ }),
+  p: new VimNode({ action: actionPasteIntoVisualSelection, mode: 0 /* COMMAND */ })
 });
 var RESERVED_KEYS = ["Shift", "Control", "Alt", "Meta", "AltGraph"];
 
@@ -221,7 +223,7 @@ function onKey(vim, key) {
     }
     vim.allowClipboardReset = true;
     const prevHistoryState = toHistoryState(vim);
-    for (var i2 = 0;i2 < repeat; i2++) {
+    for (var i = 0;i < repeat; i++) {
       vim.data.action(vim, vim.data);
     }
     if (!vim.data.dontSaveUndoState) {
@@ -313,6 +315,12 @@ function getSelection(vim, data) {
   }
   return [0, 0];
 }
+function getVisualSelection(vim) {
+  return [
+    Math.min(vim.selectionStart || 0, getCaret(vim)),
+    Math.max(vim.selectionStart || 0, getCaret(vim))
+  ];
+}
 function yank(vim, start, end, cut) {
   const text = getText(vim);
   clipboard(vim, text.slice(start, end));
@@ -327,23 +335,23 @@ function insertAt(text, pos, data) {
   return text.slice(0, pos) + data + text.slice(pos);
 }
 function countSpaces(text, pos, allow = " ") {
-  let i2 = 0;
+  let i = 0;
   let c;
-  while ((c = text.charAt(pos + i2)) && allow.includes(c)) {
-    i2++;
+  while ((c = text.charAt(pos + i)) && allow.includes(c)) {
+    i++;
   }
-  return i2;
+  return i;
 }
 function lineStart(text, pos) {
-  const i2 = text.lastIndexOf(`
+  const i = text.lastIndexOf(`
 `, text.charAt(pos) === `
 ` ? pos - 1 : pos);
-  return i2 === -1 ? 0 : i2 + 1;
+  return i === -1 ? 0 : i + 1;
 }
 function lineEnd(text, pos) {
-  const i2 = text.indexOf(`
+  const i = text.indexOf(`
 `, pos);
-  return i2 === -1 ? text.length : i2;
+  return i === -1 ? text.length : i;
 }
 function isLineEnd(text, pos) {
   return text.charAt(pos) === `
@@ -353,7 +361,7 @@ function increaseIndent(str) {
   return str = " ".repeat(TAB_WIDTH) + str;
 }
 function decreaseIndent(str) {
-  for (let i2 = 0;i2 < TAB_WIDTH; i2++) {
+  for (let i = 0;i < TAB_WIDTH; i++) {
     if (str.startsWith(" ")) {
       str = str.slice(1);
     }
@@ -365,11 +373,11 @@ function findRegexBreak(text, pos, regex) {
   let r;
   let match;
   while (match = regex.exec(text)) {
-    let i2 = match.index + 1;
-    if (i2 <= pos) {
-      l = i2;
+    let i = match.index + 1;
+    if (i <= pos) {
+      l = i;
     } else if (r === undefined) {
-      r = i2;
+      r = i;
     }
   }
   return [l, r === undefined ? text.length : r];
@@ -436,15 +444,15 @@ function selectBacktick(text, pos) {
 function selectQuotes(text, pos, quote) {
   let l;
   let r;
-  for (let i2 = pos;i2 >= 0; i2--) {
-    if (text.charAt(i2) === quote) {
-      l = i2;
+  for (let i = pos;i >= 0; i--) {
+    if (text.charAt(i) === quote) {
+      l = i;
       break;
     }
   }
-  for (let i2 = pos + 1;i2 < text.length; i2++) {
-    if (text.charAt(i2) === quote) {
-      r = i2;
+  for (let i = pos + 1;i < text.length; i++) {
+    if (text.charAt(i) === quote) {
+      r = i;
       break;
     }
   }
@@ -471,11 +479,11 @@ function selectBounds(text, pos, bounds) {
     l = pos;
   } else {
     let k = 1;
-    for (let i2 = pos - 1;i2 >= 0; i2--) {
-      const char = text.charAt(i2);
+    for (let i = pos - 1;i >= 0; i--) {
+      const char = text.charAt(i);
       k += (char === start ? -1 : 0) + (char === end ? 1 : 0);
       if (k === 0) {
-        l = i2;
+        l = i;
         break;
       }
     }
@@ -484,11 +492,11 @@ function selectBounds(text, pos, bounds) {
     r = pos;
   } else {
     let k = 1;
-    for (let i2 = pos + 1;i2 < text.length; i2++) {
-      const char = text.charAt(i2);
+    for (let i = pos + 1;i < text.length; i++) {
+      const char = text.charAt(i);
       k += (char === start ? 1 : 0) + (char === end ? -1 : 0);
       if (k === 0) {
-        r = i2;
+        r = i;
         break;
       }
     }
@@ -521,13 +529,13 @@ function moveUp(text, pos) {
   return pls + Math.min(pos - ls, ple - pls);
 }
 function moveHalfPageUp(text, pos) {
-  for (let i2 = 0;i2 < PAGE_SIZE; i2++) {
+  for (let i = 0;i < PAGE_SIZE; i++) {
     pos = moveUp(text, pos);
   }
   return pos;
 }
 function moveHalfPageDown(text, pos) {
-  for (let i2 = 0;i2 < PAGE_SIZE; i2++) {
+  for (let i = 0;i < PAGE_SIZE; i++) {
     pos = moveDown(text, pos);
   }
   return pos;
@@ -671,9 +679,24 @@ function actionReplaceChar(vim, data) {
   }
   setMode(vim, data.mode || 0 /* COMMAND */);
 }
-function actionDeleteCurrentSelection(vim, data) {
-  const caret = getCaret(vim);
-  yank(vim, Math.min(vim.selectionStart || 0, caret), Math.max(vim.selectionStart || 0, caret), true);
+function actionSetVisualSelection(vim) {
+  const [start, end] = getSelection(vim, vim.data);
+  vim.selectionStart = start;
+  setCaret(vim, end);
+}
+function actionDeleteVisualSelection(vim, data) {
+  yank(vim, ...getVisualSelection(vim), true);
+  setMode(vim, data.mode || 0 /* COMMAND */);
+}
+function actionYankVisualSelection(vim, data) {
+  yank(vim, ...getVisualSelection(vim), false);
+  setMode(vim, data.mode || 0 /* COMMAND */);
+}
+function actionPasteIntoVisualSelection(vim, data) {
+  const [start, end] = getVisualSelection(vim);
+  const text = getText(vim);
+  setText(vim, text.slice(0, start) + vim.clipboard + text.slice(end));
+  setCaret(vim, start + vim.clipboard.length);
   setMode(vim, data.mode || 0 /* COMMAND */);
 }
 function actionYankRange(vim, data) {

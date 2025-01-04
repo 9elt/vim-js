@@ -109,61 +109,67 @@ const navigation = (data?: VimNodeData) => ({
     "C-d": new VimNode({ ...data, move: moveHalfPageDown }),
 });
 
-const a = new VimNode({}, {
-    "p": new VimNode({ select: selectParagraphWithSpacesAfter }),
-    "w": new VimNode({ select: selectWordWithSpacesAfter }),
-    "W": new VimNode({ select: selectWordPlusWithSpacesAfter }),
-    "'": new VimNode({ select: selectSingleQuotes }),
-    '"': new VimNode({ select: selectDoubleQuotes }),
-    '`': new VimNode({ select: selectBacktick }),
-    "(": new VimNode({ select: selectBrackets }),
-    ")": new VimNode({ select: selectBrackets }),
-    "[": new VimNode({ select: selectSquares }),
-    "]": new VimNode({ select: selectSquares }),
-    "{": new VimNode({ select: selectBraces }),
-    "}": new VimNode({ select: selectBraces }),
-    "<": new VimNode({ select: selectAngles }),
-    ">": new VimNode({ select: selectAngles }),
+const selectors = (data?: VimNodeData) => ({
+    "a": new VimNode(data, {
+        "p": new VimNode({ select: selectParagraphWithSpacesAfter }),
+        "w": new VimNode({ select: selectWordWithSpacesAfter }),
+        "W": new VimNode({ select: selectWordPlusWithSpacesAfter }),
+        "'": new VimNode({ select: selectSingleQuotes }),
+        '"': new VimNode({ select: selectDoubleQuotes }),
+        '`': new VimNode({ select: selectBacktick }),
+        "(": new VimNode({ select: selectBrackets }),
+        ")": new VimNode({ select: selectBrackets }),
+        "[": new VimNode({ select: selectSquares }),
+        "]": new VimNode({ select: selectSquares }),
+        "{": new VimNode({ select: selectBraces }),
+        "}": new VimNode({ select: selectBraces }),
+        "<": new VimNode({ select: selectAngles }),
+        ">": new VimNode({ select: selectAngles }),
+    }),
+    "i": new VimNode(data, {
+        "p": new VimNode({ select: selectParagraph }),
+        "w": new VimNode({ select: selectWord }),
+        "W": new VimNode({ select: selectWordPlus }),
+        "'": new VimNode({ select: inside(selectSingleQuotes) }),
+        '"': new VimNode({ select: inside(selectDoubleQuotes) }),
+        '`': new VimNode({ select: inside(selectBacktick) }),
+        "(": new VimNode({ select: inside(selectBrackets) }),
+        ")": new VimNode({ select: inside(selectBrackets) }),
+        "[": new VimNode({ select: inside(selectSquares) }),
+        "]": new VimNode({ select: inside(selectSquares) }),
+        "{": new VimNode({ select: inside(selectBraces) }),
+        "}": new VimNode({ select: inside(selectBraces) }),
+        "<": new VimNode({ select: inside(selectAngles) }),
+        ">": new VimNode({ select: inside(selectAngles) }),
+    }),
 });
 
-const i = new VimNode({}, {
-    "p": new VimNode({ select: selectParagraph }),
-    "w": new VimNode({ select: selectWord }),
-    "W": new VimNode({ select: selectWordPlus }),
-    "'": new VimNode({ select: inside(selectSingleQuotes) }),
-    '"': new VimNode({ select: inside(selectDoubleQuotes) }),
-    '`': new VimNode({ select: inside(selectBacktick) }),
-    "(": new VimNode({ select: inside(selectBrackets) }),
-    ")": new VimNode({ select: inside(selectBrackets) }),
-    "[": new VimNode({ select: inside(selectSquares) }),
-    "]": new VimNode({ select: inside(selectSquares) }),
-    "{": new VimNode({ select: inside(selectBraces) }),
-    "}": new VimNode({ select: inside(selectBraces) }),
-    "<": new VimNode({ select: inside(selectAngles) }),
-    ">": new VimNode({ select: inside(selectAngles) }),
-});
+const baseSelectors = selectors();
+const visualSelectors = selectors({ action: actionSetVisualSelection });
+
+const baseNavigation = navigation();
+const moveNavigation = navigation({ action: actionMove });
 
 const commandTree = new VimNode({}, {
-    ...navigation({ action: actionMove }),
+    ...moveNavigation,
     ...digits,
     "a": new VimNode({ action: actionAppend }),
     "A": new VimNode({ action: actionAppendToEnd }),
     "c": new VimNode({ action: actionDeleteRange, mode: Mode.INSERT }, {
-        ...navigation(),
-        "a": a,
-        "i": i,
+        ...baseNavigation,
+        ...baseSelectors,
         "c": new VimNode({ select: selectLine }),
         "w": new VimNode({ select: selectToWordBound }),
         "W": new VimNode({ select: selectToWordBoundPlus }),
     }),
     "C": new VimNode({ action: actionDeleteRange, move: lineEnd, mode: Mode.INSERT }),
     "d": new VimNode({ action: actionDeleteRange, mode: Mode.COMMAND }, {
-        ...navigation(),
-        "a": a,
-        "i": i,
+        ...baseNavigation,
+        ...baseSelectors,
         "d": new VimNode({ select: selectLineNL }),
         "w": new VimNode({ select: selectToNextWord }),
         "W": new VimNode({ select: selectToNextWordPlus }),
+        // TODO: "t"
     }),
     "D": new VimNode({ action: actionDeleteRange, move: lineEnd, mode: Mode.COMMAND }),
     "i": new VimNode({ action: actionInsert }),
@@ -179,35 +185,33 @@ const commandTree = new VimNode({}, {
     "x": new VimNode({ action: actionDeleteChar }),
     "r": new VimNode({ action: actionReplaceChar, readNextChar: true }),
     "y": new VimNode({ action: actionYankRange }, {
-        ...navigation(),
-        "a": a,
-        "i": i,
+        ...baseNavigation,
+        ...baseSelectors,
         "y": new VimNode({ select: selectLineNL }),
         "w": new VimNode({ select: selectToNextWord }),
         "W": new VimNode({ select: selectToNextWordPlus }),
     }),
     ">": new VimNode({ action: actionIncreaseIndent }, {
-        ...navigation(),
-        "a": a,
-        "i": i,
+        ...baseNavigation,
+        ...baseSelectors,
         ">": new VimNode({ select: selectLine }),
     }),
     "<": new VimNode({ action: actionDecreaseIndent }, {
-        ...navigation(),
-        "a": a,
-        "i": i,
+        ...baseNavigation,
+        ...baseSelectors,
         "<": new VimNode({ select: selectLine }),
     }),
     // TODO: "."
 });
 
-const visualTree = new VimNode({}, {
-    ...navigation({ action: actionMove }),
+const visualTree = new VimNode({ action: actionMove }, {
+    ...moveNavigation,
+    ...visualSelectors,
     ...digits,
-    "d": new VimNode({ action: actionDeleteCurrentSelection, mode: Mode.COMMAND }),
-    "c": new VimNode({ action: actionDeleteCurrentSelection, mode: Mode.INSERT }),
-    // TODO: "y"
-    // TODO: "p"
+    "d": new VimNode({ action: actionDeleteVisualSelection, mode: Mode.COMMAND }),
+    "c": new VimNode({ action: actionDeleteVisualSelection, mode: Mode.INSERT }),
+    "y": new VimNode({ action: actionYankVisualSelection, mode: Mode.COMMAND }),
+    "p": new VimNode({ action: actionPasteIntoVisualSelection, mode: Mode.COMMAND }),
     // TODO: ">"
     // TODO: "<"
 });
@@ -444,6 +448,13 @@ function getSelection(vim: Vim, data: VimNodeData): TextRange {
     }
 
     return [0, 0];
+}
+
+function getVisualSelection(vim: Vim): TextRange {
+    return [
+        Math.min(vim.selectionStart || 0, getCaret(vim)),
+        Math.max(vim.selectionStart || 0, getCaret(vim)),
+    ];
 }
 
 function yank(vim: Vim, start: number, end: number, cut: boolean): string {
@@ -968,14 +979,29 @@ function actionReplaceChar(vim: Vim, data: VimNodeData): void {
     setMode(vim, data.mode || Mode.COMMAND);
 }
 
-function actionDeleteCurrentSelection(vim: Vim, data: VimNodeData): void {
-    const caret = getCaret(vim);
-    yank(
-        vim,
-        Math.min(vim.selectionStart || 0, caret),
-        Math.max(vim.selectionStart || 0, caret),
-        true
-    );
+function actionSetVisualSelection(vim: Vim) {
+    const [start, end] = getSelection(vim, vim.data);
+    vim.selectionStart = start;
+    setCaret(vim, end);
+}
+
+function actionDeleteVisualSelection(vim: Vim, data: VimNodeData): void {
+    yank(vim, ...getVisualSelection(vim), true);
+    setMode(vim, data.mode || Mode.COMMAND);
+}
+
+function actionYankVisualSelection(vim: Vim, data: VimNodeData): void {
+    yank(vim, ...getVisualSelection(vim), false);
+    setMode(vim, data.mode || Mode.COMMAND);
+}
+
+function actionPasteIntoVisualSelection(vim: Vim, data: VimNodeData): void {
+    const [start, end] = getVisualSelection(vim);
+    const text = getText(vim);
+
+    setText(vim, text.slice(0, start) + vim.clipboard + text.slice(end));
+    setCaret(vim, start + vim.clipboard.length);
+
     setMode(vim, data.mode || Mode.COMMAND);
 }
 
