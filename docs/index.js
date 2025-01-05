@@ -175,6 +175,7 @@ class Vim {
   undo = [];
   allowClipboardReset = false;
   selectionStart = null;
+  historyBeforeInsert = null;
   constructor(textarea) {
     this.textarea = textarea;
     textarea.addEventListener("keydown", (event) => {
@@ -191,8 +192,11 @@ class Vim {
 function onKey(vim, key) {
   vim.keyseq.push(key);
   if (key === "Escape" || key === "C-c" || key === "C-s") {
-    if (vim.keyseq.length > 1 && vim.mode === 1 /* INSERT */) {
-      vim.modseq = vim.keyseq;
+    if (vim.mode === 1 /* INSERT */) {
+      saveUndoState(vim, vim.historyBeforeInsert);
+      if (vim.keyseq.length > 1) {
+        vim.modseq = vim.keyseq;
+      }
     }
     vim.keyseq = [];
     setMode(vim, 0 /* COMMAND */);
@@ -235,11 +239,17 @@ function exec(vim) {
     vim.digits = "";
   }
   vim.allowClipboardReset = true;
-  const prevHistoryState = toHistoryState(vim);
+  const prevHistoryState = {
+    text: getText(vim),
+    caret: getCaret(vim)
+  };
   for (var i = 0;i < repeat; i++) {
     vim.data.action(vim, vim.data);
   }
   if (vim.data.mode !== undefined) {
+    if (vim.data.mode === 1 /* INSERT */) {
+      vim.historyBeforeInsert = prevHistoryState;
+    }
     setMode(vim, vim.data.mode);
   }
   if (!vim.data.dontSaveUndoState) {
@@ -266,12 +276,6 @@ function setCaret(vim, caret) {
   } else {
     vim.textarea.setSelectionRange(caret, caret);
   }
-}
-function toHistoryState(vim) {
-  return {
-    text: getText(vim),
-    caret: getCaret(vim)
-  };
 }
 function setMode(vim, mode) {
   if (vim.mode === mode) {
