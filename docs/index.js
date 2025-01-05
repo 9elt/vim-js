@@ -163,6 +163,7 @@ var RESERVED_KEYS = ["Shift", "CapsLock", "Control", "Meta", "Alt", "AltGraph"];
 
 class Vim {
   textarea;
+  options;
   mode = 0 /* COMMAND */;
   node = commandTree;
   data = {};
@@ -176,8 +177,9 @@ class Vim {
   allowClipboardReset = false;
   selectionStart = null;
   historyBeforeInsert = null;
-  constructor(textarea) {
+  constructor(textarea, options = {}) {
     this.textarea = textarea;
+    this.options = options;
     textarea.addEventListener("keydown", (event) => {
       if (!RESERVED_KEYS.includes(event.key)) {
         const key = event.ctrlKey ? "C-" + event.key : event.key;
@@ -214,7 +216,9 @@ function onKey(vim, key) {
     }
     return false;
   }
-  console.log(vim.cmdseq + key);
+  if (vim.options.onCmdSeq) {
+    vim.options.onCmdSeq(vim.cmdseq + key);
+  }
   if (vim.data.readNextChar) {
     vim.data.nextChar = key;
     exec(vim);
@@ -289,6 +293,9 @@ function setMode(vim, mode) {
     vim.textarea.setSelectionRange(caret, caret);
   }
   vim.mode = mode;
+  if (vim.options.onModeChange) {
+    vim.options.onModeChange(vim.mode === 0 /* COMMAND */ ? "NORMAL" : vim.mode === 1 /* INSERT */ ? "INSERT" : "VISUAL");
+  }
 }
 function resetCommand(vim) {
   if (vim.data.mode !== 1 /* INSERT */ && vim.data.mode !== 2 /* VISUAL */) {
@@ -779,4 +786,4 @@ function actionRepeatLastAction(vim) {
 }
 
 // index.ts
-new Vim(document.querySelector("textarea"));
+new Vim(document.querySelector("textarea"), { onCmdSeq: console.log });
